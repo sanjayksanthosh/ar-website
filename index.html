@@ -43,27 +43,58 @@
     <script>
         // Check for deviceId in URL and override getUserMedia to force specific camera
         const urlParams = new URLSearchParams(window.location.search);
+        // If deviceId is present, we uses it. 
+        // If NOT present, user requested to default to "Camera 0" (index 0).
         const currentDeviceId = urlParams.get('deviceId');
 
-        if (currentDeviceId) {
-            console.log("Overriding getUserMedia for deviceId:", currentDeviceId);
-            const origGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-            navigator.mediaDevices.getUserMedia = function(constraints) {
-                if (constraints && constraints.video) {
-                    // Create a new constraint object to avoid mutating the original reference in unexpected ways
-                    let newConstraints = JSON.parse(JSON.stringify(constraints));
-                    if (typeof newConstraints.video === 'boolean') {
-                        newConstraints.video = { deviceId: { exact: currentDeviceId } };
-                    } else {
-                        newConstraints.video.deviceId = { exact: currentDeviceId };
-                        delete newConstraints.video.facingMode; // Remove facing mode if ID is present
+        console.log("Initializing Camera Override...");
+        
+        const origGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+        navigator.mediaDevices.getUserMedia = async function(constraints) {
+            // Check if this is a video request
+            if (constraints && constraints.video) {
+                try {
+                    console.log("Intercepting getUserMedia...", constraints);
+                    
+                    let targetDeviceId = currentDeviceId;
+
+                    // If no specific ID requested via URL, find Camera 0
+                    if (!targetDeviceId) {
+                        const devices = await navigator.mediaDevices.enumerateDevices();
+                        const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                        if (videoDevices.length > 0) {
+                            targetDeviceId = videoDevices[0].deviceId;
+                            console.log("Defaulting to Camera 0:", targetDeviceId);
+                        }
                     }
-                    console.log("Requested constraints:", newConstraints);
-                    return origGetUserMedia(newConstraints);
+
+                    // If we have a target ID (either from URL or default 0), apply it
+                    if (targetDeviceId) {
+                        let newConstraints = JSON.parse(JSON.stringify(constraints));
+                        
+                        // normalize 'video' constraint
+                        if (typeof newConstraints.video === 'boolean') {
+                            newConstraints.video = {}; 
+                        }
+
+                        // Apply exact deviceId
+                        newConstraints.video.deviceId = { exact: targetDeviceId };
+                        
+                        // Remove conflicting constraints (like facingMode) that AR.js might have set
+                        if (newConstraints.video.facingMode) {
+                            delete newConstraints.video.facingMode;
+                        }
+
+                        console.log("Final Constraints:", newConstraints);
+                        return origGetUserMedia(newConstraints);
+                    }
+                } catch (e) {
+                    console.error("Error in getUserMedia override:", e);
                 }
-                return origGetUserMedia(constraints);
-            };
-        }
+            }
+            // Fallback to original if not video or error
+            return origGetUserMedia(constraints);
+        };
 
         window.addEventListener('load', () => {
              // Create Switch Button UI
