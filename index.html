@@ -20,6 +20,23 @@
         #overlay {
             z-index: 10;
         }
+        
+        /* FIX: Prevent Tailwind from messing with AR.js video element */
+        video {
+            object-fit: initial !important; /* Prevent 'cover' or 'contain' processing */
+        }
+        #arjs-video, body > video {
+            max-width: none !important;
+            height: auto !important;
+            width: auto !important;
+            min-width: 100% !important;
+            min-height: 100% !important;
+            display: block !important;
+            position: absolute !important;
+            top: 0;
+            left: 0;
+            z-index: -1 !important; /* Ensure it stays behind the canvas */
+        }
     </style>
 </head>
 <body class="m-0 overflow-hidden bg-gray-900">
