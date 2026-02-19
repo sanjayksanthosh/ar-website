@@ -69,13 +69,54 @@
              // Create Switch Button UI
             const switchBtn = document.createElement('button');
             switchBtn.innerText = "Switch Camera";
-            // Check if button already exists to avoid duplicates
             if (!document.getElementById('switch-camera-btn')) {
                 switchBtn.id = 'switch-camera-btn';
                 switchBtn.className = "fixed bottom-4 right-4 z-50 bg-white text-gray-900 px-4 py-2 rounded-full font-bold shadow-lg active:scale-95 transition-transform text-sm";
                 switchBtn.onclick = switchCamera;
                 document.body.appendChild(switchBtn);
             }
+
+            // Create Debug Info Panel
+            const debugPanel = document.createElement('div');
+            debugPanel.id = 'camera-debug-info';
+            debugPanel.className = "fixed top-0 left-0 p-2 bg-black/70 text-green-400 text-xs font-mono z-50 pointer-events-none max-w-full break-words";
+            debugPanel.style.maxWidth = '300px';
+            debugPanel.innerText = "Waiting for stream...";
+            document.body.appendChild(debugPanel);
+
+            // Function to update debug info
+            function updateDebugInfo(stream) {
+                if (!stream) return;
+                const track = stream.getVideoTracks()[0];
+                if (!track) return;
+
+                const settings = track.getSettings();
+                const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+                const label = track.label;
+
+                debugPanel.innerHTML = `
+                    <strong>Camera:</strong> ${label}<br>
+                    <strong>ID:</strong> ${settings.deviceId}<br>
+                    <strong>Res:</strong> ${settings.width}x${settings.height}<br>
+                    <strong>Aspect:</strong> ${settings.aspectRatio}<br>
+                    <strong>FrameRate:</strong> ${settings.frameRate}<br>
+                    <strong>Focus:</strong> ${settings.focusMode}<br>
+                    <strong>Zoom:</strong> ${settings.zoom}<br>
+                `;
+            }
+
+            // Hook into getUserMedia to steal the stream for debug info
+            const oldGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+            navigator.mediaDevices.getUserMedia = async function(constraints) {
+                try {
+                    const stream = await oldGetUserMedia(constraints);
+                    updateDebugInfo(stream);
+                    return stream;
+                } catch (err) {
+                    debugPanel.innerText = "Error: " + err.message;
+                    throw err;
+                }
+            };
 
             async function switchCamera() {
                 try {
