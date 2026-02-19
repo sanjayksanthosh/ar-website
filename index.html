@@ -38,6 +38,75 @@
             z-index: -1 !important; /* Ensure it stays behind the canvas */
         }
     </style>
+
+    <!-- Camera Switcher / Override Script (Must run before AR.js init sometimes) -->
+    <script>
+        // Check for deviceId in URL and override getUserMedia to force specific camera
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentDeviceId = urlParams.get('deviceId');
+
+        if (currentDeviceId) {
+            console.log("Overriding getUserMedia for deviceId:", currentDeviceId);
+            const origGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+            navigator.mediaDevices.getUserMedia = function(constraints) {
+                if (constraints && constraints.video) {
+                    // Create a new constraint object to avoid mutating the original reference in unexpected ways
+                    let newConstraints = JSON.parse(JSON.stringify(constraints));
+                    if (typeof newConstraints.video === 'boolean') {
+                        newConstraints.video = { deviceId: { exact: currentDeviceId } };
+                    } else {
+                        newConstraints.video.deviceId = { exact: currentDeviceId };
+                        delete newConstraints.video.facingMode; // Remove facing mode if ID is present
+                    }
+                    console.log("Requested constraints:", newConstraints);
+                    return origGetUserMedia(newConstraints);
+                }
+                return origGetUserMedia(constraints);
+            };
+        }
+
+        window.addEventListener('load', () => {
+             // Create Switch Button UI
+            const switchBtn = document.createElement('button');
+            switchBtn.innerText = "Switch Camera";
+            // Check if button already exists to avoid duplicates
+            if (!document.getElementById('switch-camera-btn')) {
+                switchBtn.id = 'switch-camera-btn';
+                switchBtn.className = "fixed bottom-4 right-4 z-50 bg-white text-gray-900 px-4 py-2 rounded-full font-bold shadow-lg active:scale-95 transition-transform text-sm";
+                switchBtn.onclick = switchCamera;
+                document.body.appendChild(switchBtn);
+            }
+
+            async function switchCamera() {
+                try {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                    
+                    if (videoDevices.length < 2) {
+                        alert("Only one camera found.");
+                        return;
+                    }
+
+                    let currentIndex = 0;
+                    if (currentDeviceId) {
+                        currentIndex = videoDevices.findIndex(d => d.deviceId === currentDeviceId);
+                        if (currentIndex === -1) currentIndex = 0; // fallback
+                    }
+                    
+                    const nextIndex = (currentIndex + 1) % videoDevices.length;
+                    const nextDeviceId = videoDevices[nextIndex].deviceId;
+
+                    const newUrl = new URL(window.location.href);
+                    newUrl.searchParams.set('deviceId', nextDeviceId);
+                    window.location.href = newUrl.toString();
+
+                } catch (err) {
+                    console.error("Error switching camera:", err);
+                    alert("Switch error: " + err.message);
+                }
+            }
+        });
+    </script>
 </head>
 <body class="m-0 overflow-hidden bg-gray-900">
 
@@ -120,7 +189,7 @@
     <!-- AR.js Scene -->
     <a-scene 
         embedded 
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960;"
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
         vr-mode-ui="enabled: false"
         renderer="antialias: true; alpha: true"
     >
@@ -174,6 +243,8 @@
         <!-- The AR Camera -->
         <a-entity camera></a-entity>
     </a-scene>
+
+
 
 </body>
 </html>
